@@ -1,6 +1,8 @@
 from collections import defaultdict
+import json
 from pydantic import BaseModel
 from app.log_parser import LogEntry
+from app.ollama_client import OllamaClient
 
 SUSPICIOUS_UA = ["Nikto", "sqlmap", "zgrab", "python-requests", "masscan"]
 
@@ -111,3 +113,38 @@ def analyze(entries: list[LogEntry]) -> list[AnomalyReport]:
             reports.append(report)
     
     return reports
+
+def enrich_with_ai(reports: list[AnomalyReport], client: OllamaClient, model: str) -> list[dict]:
+    enriched_reports = []
+    for report in reports:
+        
+        prompt = f"""You are a security analyst. Analyze this security anomaly and return ONLY a valid JSON object.
+
+                Anomaly data:
+                {report.model_dump_json()}
+
+                Return ONLY this JSON structure with real values based on the anomaly above:
+                {{
+                "summary": "describe the actual threat in one sentence",
+                "severity_justification": "explain why this specific severity",
+                "immediate_actions": [
+                    {{"action": "block_ip", "target": "<actual IP from anomaly>", "reason": "<actual reason>"}},
+                    {{"action": "restrict_path", "target": "<actual path>", "reason": "<actual reason>"}}
+                ],
+                "recommended_rules": ["<specific rule 1>", "<specific rule 2>"],
+                "risk_score": <number 0-10>
+                }}
+
+                Available actions: block_ip, restrict_path, rate_limit, alert_admin, block_user_agent
+                Return ONLY the JSON, no markdown, no explanation."""
+        
+        try:
+            ai_response = client.generate(model=model, prompt=prompt)
+            ai_analysis = json.loads(ai_response)
+            enriched_reports.append({
+                "report": report.model_dump(),
+                "ai_analysis": ai_analysis
+            })
+        except Exception as e:
+            print(f"Error occurred while generating AI response for report {report}: {e}")
+    return enriched_reports
