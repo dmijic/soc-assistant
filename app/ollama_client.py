@@ -5,7 +5,6 @@ class OllamaClient():
         self.base_url = base_url
 
     def embed(self, model: str, text: str) -> list[float]:
-        # pozovi Ollama API, vrati listu floatova
         response = httpx.post(
             f"{self.base_url}/api/embeddings",
             json={
@@ -28,5 +27,4 @@ class OllamaClient():
             timeout=120
         )
         data = response.json()
-        #return string from data
         return data["response"]
